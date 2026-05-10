@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DesiNet</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    :root{
+      --bg:#0a0a0a;--card:#161616;--card2:#1e1e1e;
+      --red:#e50914;--orange:#ff6b35;--text:#fff;--dim:#999;
+      --proxy:https://feedscroll.rayhandox.workers.dev;
+    }
+    body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;overflow-x:hidden;}
+
+    /* Header */
+    #header{position:sticky;top:0;z-index:100;background:linear-gradient(180deg,#0a0a0a 80%,transparent);padding:12px 16px 8px;}
+    .logo{font-size:26px;font-weight:900;letter-spacing:-1px;margin-bottom:10px;}
+    .logo span:first-child{color:var(--red);}
+    .search-row{display:flex;gap:8px;align-items:center;}
+    #searchInput{flex:1;background:#1e1e1e;border:1px solid #333;border-radius:8px;padding:8px 12px;color:#fff;font-size:14px;outline:none;}
+    #searchInput:focus{border-color:var(--red);}
+    #refreshBtn{background:#1e1e1e;border:1px solid #333;border-radius:8px;padding:8px 10px;color:#fff;font-size:16px;cursor:pointer;}
+
+    /* Source tabs */
+    #sourceTabs{display:flex;gap:6px;padding:10px 16px;overflow-x:auto;scrollbar-width:none;}
+    #sourceTabs::-webkit-scrollbar{display:none;}
+    .src-tab{flex-shrink:0;padding:5px 14px;border-radius:20px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid #333;color:var(--dim);transition:.2s;}
+    .src-tab.active{background:var(--red);border-color:var(--red);color:#fff;}
+
+    /* Section */
+    .section{padding:0 16px 20px;}
+    .section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+    .section-title{font-size:15px;font-weight:700;display:flex;align-items:center;gap:6px;}
+    .count-badge{font-size:11px;color:var(--dim);font-weight:400;}
+
+    /* Video grid */
+    .video-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+    .video-card{background:var(--card);border-radius:10px;overflow:hidden;cursor:pointer;transition:transform .15s;active:transform scale(0.97);}
+    .video-card:active{transform:scale(0.97);}
+    .thumb-wrap{position:relative;aspect-ratio:16/9;background:#111;overflow:hidden;}
+    .thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block;}
+    .thumb-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:28px;background:#111;}
+    .fav-btn{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.6);border:none;border-radius:50%;width:28px;height:28px;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+    .card-info{padding:8px;}
+    .card-title{font-size:12px;font-weight:600;line-height:1.3;margin-bottom:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+    .card-source{font-size:10px;color:var(--dim);}
+
+    /* Source dot colors */
+    .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:4px;}
+    .dot-desitales{background:#e50914;}
+    .dot-desikahani{background:#ff9500;}
+    .dot-xahani{background:#9b59b6;}
+    .dot-indianbf{background:#27ae60;}
+
+    /* Loading */
+    .loading-row{display:flex;align-items:center;justify-content:center;padding:40px;gap:10px;color:var(--dim);}
+    .spin{animation:spin 1s linear infinite;font-size:20px;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+
+    /* Empty state */
+    .empty{text-align:center;padding:50px 20px;color:var(--dim);}
+    .empty .e-icon{font-size:40px;margin-bottom:10px;}
+
+    /* Video player modal */
+    #playerModal{display:none;position:fixed;inset:0;z-index:9999;background:#000;flex-direction:column;}
+    #playerModal.open{display:flex;}
+    #playerTopBar{padding:12px 16px;display:flex;align-items:center;gap:12px;background:#000;}
+    #closePlayer{background:none;border:none;color:#fff;font-size:22px;cursor:pointer;}
+    #playerTitle{flex:1;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    #favPlayerBtn{background:none;border:none;font-size:20px;cursor:pointer;}
+    #videoWrap{flex:1;display:flex;align-items:center;justify-content:center;background:#000;}
+    video{width:100%;max-height:100%;outline:none;}
+    #playerMeta{padding:12px 16px;background:#111;}
+    #playerSource{font-size:12px;color:var(--dim);}
+    #playerControls{display:flex;gap:10px;padding:10px 16px 20px;background:#111;}
+    #prevBtn,#nextBtn{flex:1;padding:10px;background:#1e1e1e;border:1px solid #333;border-radius:8px;color:#fff;font-size:14px;cursor:pointer;}
+
+    /* Saved tab */
+    #savedSection{display:none;}
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <div class="logo"><span>DESI</span><span style="color:#fff">NET</span></div>
+  <div class="search-row">
+    <input id="searchInput" type="search" placeholder="🔍  Search videos..." />
+    <button id="refreshBtn" onclick="loadFeed()">↻</button>
+  </div>
+</div>
+
+<!-- Source tabs -->
+<div id="sourceTabs">
+  <div class="src-tab active" onclick="setSource('all')" data-src="all">🎬 All</div>
+  <div class="src-tab" onclick="setSource('desitales')" data-src="desitales">🔴 DesiTales</div>
+  <div class="src-tab" onclick="setSource('desikahani')" data-src="desikahani">🟠 DesiKahani</div>
+  <div class="src-tab" onclick="setSource('xahani')" data-src="xahani">🟣 Xahani</div>
+  <div class="src-tab" onclick="setSource('indianbf')" data-src="indianbf">🟢 IndianBF</div>
+  <div class="src-tab" onclick="setSource('saved')" data-src="saved">⭐ Saved</div>
+</div>
+
+<!-- Main content -->
+<div id="mainContent">
+  <div class="loading-row"><span class="spin">⏳</span> Loading feed...</div>
+</div>
+
+<!-- Video Player Modal -->
+<div id="playerModal">
+  <div id="playerTopBar">
+    <button id="closePlayer" onclick="closePlayer()">✕</button>
+    <div id="playerTitle">Loading...</div>
+    <button id="favPlayerBtn" onclick="toggleFavCurrent()">🤍</button>
+  </div>
+  <div id="videoWrap">
+    <video id="mainVideo" controls autoplay playsinline webkit-playsinline></video>
+  </div>
+  <div id="playerMeta">
+    <div id="playerSource"></div>
+  </div>
+  <div id="playerControls">
+    <button id="prevBtn" onclick="playAdjacentVideo(-1)">⬅ Previous</button>
+    <button id="nextBtn" onclick="playAdjacentVideo(1)">Next ➡</button>
+  </div>
+</div>
+
+<script>
+const PROXY = 'https://feedscroll.rayhandox.workers.dev';
+const M3U_URL = 'https://raw.githubusercontent.com/Rayhan2Git/Feed/main/playlist.m3u';
+
+const CDN = {
+  desitales:  'cdn.desitales2.com',
+  desikahani: 'cdn.desikahani2.net',
+  xahani:     'cdn.xahani.com',
+  indianbf:   'cdn.indianbfvideos.com'
+};
+const WWW = {
+  desitales:  'www.desitales2.com',
+  desikahani: 'www.desikahani2.net',
+  xahani:     'www.xahani.com',
+  indianbf:   'www.indianbfvideos.com'
+};
+
+let allVideos = [];
+let filteredVideos = [];
+let currentSource = 'all';
+let currentVideoIndex = 0;
+let favorites = JSON.parse(localStorage.getItem('dn_favs') || '[]');
+
+function getFolder(siteKey, id) {
+  if (siteKey === 'indianbf') return Math.floor(id / 1000) * 1000;
+  if (id < 1000) return 0;
+  if (id < 2000) return 1000;
+  if (id < 3000) return 2000;
+  return 3000;
+}
+
+function videoUrl(site, id) {
+  const folder = getFolder(site, id);
+  const raw = `https://${CDN[site]}/${folder}/${id}/${id}.mp4`;
+  return `${PROXY}?url=${encodeURIComponent(raw)}`;
+}
+
+function thumbUrl(site, id) {
+  const folder = getFolder(site, id);
+  // Use proxy for thumbnails too (fixes CORS)
+  const raw = `https://${WWW[site]}/videos/contents/videos_screenshots/${folder}/${id}/320x180/1.jpg`;
+  return `${PROXY}?url=${encodeURIComponent(raw)}`;
+}
+
+async function loadFeed() {
+  document.getElementById('mainContent').innerHTML =
+    '<div class="loading-row"><span class="spin">⏳</span> Fetching playlist...</div>';
+  try {
+    const res = await fetch(M3U_URL + '?t=' + Date.now());
+    const text = await res.text();
+    allVideos = parseM3U(text);
+    renderVideos();
+  } catch(e) {
+    document.getElementById('mainContent').innerHTML =
+      `<div class="empty"><div class="e-icon">⚠️</div><p>Failed to load feed.<br>Check your connection.</p></div>`;
+  }
+}
+
+function parseM3U(text) {
+  const lines = text.split('\n');
+  const videos = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith('#EXTINF')) {
+      const titleMatch = line.match(/,(.+)$/);
+      const groupMatch = line.match(/group-title="([^"]+)"/);
+      const logoMatch = line.match(/tvg-logo="([^"]+)"/);
+      const idMatch = line.match(/tvg-id="([^"]+)"/);
+      const url = lines[i+1] ? lines[i+1].trim() : '';
+      if (url && !url.startsWith('#')) {
+        const source = (groupMatch ? groupMatch[1] : '').toLowerCase();
+        const id = idMatch ? parseInt(idMatch[1]) : 0;
+        videos.push({
+          title: titleMatch ? titleMatch[1].trim() : `Video ${id}`,
+          source: source || detectSource(url),
+          id,
+          url,
+          logo: logoMatch ? logoMatch[1] : null
+        });
+        i++;
+      }
+    }
+  }
+  return videos;
+}
+
+function detectSource(url) {
+  if (url.includes('desitales')) return 'desitales';
+  if (url.includes('desikahani')) return 'desikahani';
+  if (url.includes('xahani')) return 'xahani';
+  if (url.includes('indianbf')) return 'indianbf';
+  return 'unknown';
+}
+
+function setSource(src) {
+  currentSource = src;
+  document.querySelectorAll('.src-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`[data-src="${src}"]`).classList.add('active');
+  renderVideos();
+}
+
+function renderVideos() {
+  let videos = allVideos;
+  const q = document.getElementById('searchInput').value.toLowerCase();
+
+  if (currentSource === 'saved') {
+    videos = allVideos.filter(v => favorites.includes(v.id + '_' + v.source));
+  } else if (currentSource !== 'all') {
+    videos = videos.filter(v => v.source === currentSource);
+  }
+
+  if (q) videos = videos.filter(v => v.title.toLowerCase().includes(q));
+  filteredVideos = videos;
+
+  if (videos.length === 0) {
+    document.getElementById('mainContent').innerHTML =
+      '<div class="empty"><div class="e-icon">🎬</div><p>No videos found.</p></div>';
+    return;
+  }
+
+  const html = `
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">
+          ${currentSource === 'saved' ? '⭐ Saved Videos' : '🆕 Latest'}
+        </div>
+        <div class="count-badge">${videos.length} videos</div>
+      </div>
+      <div class="video-grid">
+        ${videos.map((v, idx) => cardHTML(v, idx)).join('')}
+      </div>
+    </div>`;
+  document.getElementById('mainContent').innerHTML = html;
+}
+
+function cardHTML(v, idx) {
+  const favKey = v.id + '_' + v.source;
+  const isFav = favorites.includes(favKey);
+  const thumb = v.logo || (v.id ? thumbUrl(v.source, v.id) : null);
+  return `
+    <div class="video-card" onclick="openPlayer(${idx})">
+      <div class="thumb-wrap">
+        ${thumb
+          ? `<img src="${thumb}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'" loading="lazy" />`
+          : ''}
+        <div class="thumb-placeholder" ${thumb ? 'style="display:none"' : ''}>🎬</div>
+        <button class="fav-btn" onclick="event.stopPropagation();toggleFav('${favKey}',this)">${isFav ? '⭐' : '🤍'}</button>
+      </div>
+      <div class="card-info">
+        <div class="card-title">${v.title}</div>
+        <div class="card-source"><span class="dot dot-${v.source}"></span>${v.source}</div>
+      </div>
+    </div>`;
+}
+
+function toggleFav(key, btn) {
+  const idx = favorites.indexOf(key);
+  if (idx >= 0) { favorites.splice(idx, 1); btn.textContent = '🤍'; }
+  else { favorites.push(key); btn.textContent = '⭐'; }
+  localStorage.setItem('dn_favs', JSON.stringify(favorites));
+  document.getElementById('favPlayerBtn').textContent = favorites.includes(key) ? '⭐' : '🤍';
+}
+
+function toggleFavCurrent() {
+  const v = filteredVideos[currentVideoIndex];
+  if (!v) return;
+  const key = v.id + '_' + v.source;
+  const idx = favorites.indexOf(key);
+  if (idx >= 0) { favorites.splice(idx, 1); }
+  else { favorites.push(key); }
+  localStorage.setItem('dn_favs', JSON.stringify(favorites));
+  document.getElementById('favPlayerBtn').textContent = favorites.includes(key) ? '⭐' : '🤍';
+}
+
+function openPlayer(idx) {
+  currentVideoIndex = idx;
+  const v = filteredVideos[idx];
+  if (!v) return;
+  document.getElementById('playerModal').classList.add('open');
+  document.getElementById('playerTitle').textContent = v.title;
+  document.getElementById('playerSource').textContent = v.source.toUpperCase();
+  document.getElementById('favPlayerBtn').textContent =
+    favorites.includes(v.id + '_' + v.source) ? '⭐' : '🤍';
+
+  const video = document.getElementById('mainVideo');
+  // Use proxy for video playback
+  const proxied = v.id
+    ? videoUrl(v.source, v.id)
+    : `${PROXY}?url=${encodeURIComponent(v.url)}`;
+  video.src = proxied;
+  video.play().catch(() => {});
+}
+
+function closePlayer() {
+  document.getElementById('playerModal').classList.remove('open');
+  const video = document.getElementById('mainVideo');
+  video.pause();
+  video.src = '';
+}
+
+function playAdjacentVideo(dir) {
+  const next = currentVideoIndex + dir;
+  if (next >= 0 && next < filteredVideos.length) openPlayer(next);
+}
+
+// Search
+document.getElementById('searchInput').addEventListener('input', renderVideos);
+
+// Init
+loadFeed();
+</script>
+</body>
+</html>
