@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DesiScroll</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box;}
+    :root{
+      --bg:#000;--overlay:rgba(0,0,0,.5);
+      --red:#e50914;--text:#fff;--dim:#aaa;
+    }
+    html,body{width:100%;height:100%;background:#000;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,sans-serif;}
+
+    /* Feed container - full screen scroll snap */
+    #feed{
+      width:100%;height:100%;
+      overflow-y:scroll;overflow-x:hidden;
+      scroll-snap-type:y mandatory;
+      scrollbar-width:none;
+      -webkit-overflow-scrolling:touch;
+    }
+    #feed::-webkit-scrollbar{display:none;}
+
+    /* Each video slide */
+    .slide{
+      width:100%;height:100vh;
+      scroll-snap-align:start;
+      scroll-snap-stop:always;
+      position:relative;
+      background:#000;
+      flex-shrink:0;
+    }
+
+    video.slide-video{
+      width:100%;height:100%;
+      object-fit:cover;
+      display:block;
+    }
+
+    /* Bottom overlay */
+    .slide-overlay{
+      position:absolute;
+      bottom:0;left:0;right:0;
+      padding:16px 80px 80px 16px;
+      background:linear-gradient(transparent, rgba(0,0,0,0.85));
+      pointer-events:none;
+    }
+    .slide-title{font-size:14px;font-weight:700;line-height:1.4;margin-bottom:4px;}
+    .slide-source{font-size:12px;color:var(--dim);}
+
+    /* Right action buttons */
+    .slide-actions{
+      position:absolute;
+      right:12px;bottom:80px;
+      display:flex;flex-direction:column;gap:20px;
+      align-items:center;
+    }
+    .action-btn{
+      display:flex;flex-direction:column;align-items:center;gap:3px;
+      background:none;border:none;color:#fff;cursor:pointer;
+      -webkit-tap-highlight-color:transparent;
+    }
+    .action-btn .icon{font-size:26px;}
+    .action-btn .label{font-size:10px;color:var(--dim);}
+
+    /* Top bar */
+    #topBar{
+      position:fixed;top:0;left:0;right:0;z-index:100;
+      display:flex;align-items:center;justify-content:space-between;
+      padding:env(safe-area-inset-top, 12px) 16px 10px;
+      background:linear-gradient(180deg,rgba(0,0,0,.7),transparent);
+      pointer-events:none;
+    }
+    #topBar .tl{font-size:18px;font-weight:900;letter-spacing:-0.5px;}
+    #topBar .tl span:first-child{color:var(--red);}
+    .top-right{pointer-events:all;display:flex;gap:8px;}
+    .icon-btn{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:50%;width:34px;height:34px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+
+    /* Source filter tabs */
+    #filterBar{
+      position:fixed;top:calc(env(safe-area-inset-top,0px) + 44px);left:0;right:0;z-index:99;
+      display:flex;gap:6px;padding:6px 14px;
+      overflow-x:auto;scrollbar-width:none;
+      pointer-events:all;
+    }
+    #filterBar::-webkit-scrollbar{display:none;}
+    .f-tab{
+      flex-shrink:0;padding:4px 12px;border-radius:16px;
+      font-size:11px;font-weight:600;cursor:pointer;
+      background:rgba(255,255,255,.15);color:#fff;border:none;
+      -webkit-tap-highlight-color:transparent;
+    }
+    .f-tab.active{background:var(--red);}
+
+    /* Loading */
+    #loadingScreen{
+      position:fixed;inset:0;background:#000;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;
+      z-index:999;
+    }
+    #loadingScreen .ll{font-size:30px;font-weight:900;}
+    #loadingScreen .ll span:first-child{color:var(--red);}
+    .spin{animation:spin 1s linear infinite;}
+    @keyframes spin{to{transform:rotate(360deg);}}
+
+    /* Mute indicator */
+    #muteIndicator{
+      position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+      background:rgba(0,0,0,.7);border-radius:50%;width:60px;height:60px;
+      display:flex;align-items:center;justify-content:center;font-size:28px;
+      z-index:200;opacity:0;transition:opacity .3s;pointer-events:none;
+    }
+    #muteIndicator.show{opacity:1;}
+
+    /* Saved grid modal */
+    #savedModal{
+      display:none;position:fixed;inset:0;background:#0a0a0a;z-index:500;
+      flex-direction:column;
+    }
+    #savedModal.open{display:flex;}
+    #savedHeader{padding:14px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #222;}
+    #savedHeader h2{flex:1;font-size:16px;}
+    .close-modal{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;}
+    #savedGrid{flex:1;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;padding:2px;}
+    .saved-thumb{aspect-ratio:9/16;background:#111;cursor:pointer;overflow:hidden;position:relative;}
+    .saved-thumb img{width:100%;height:100%;object-fit:cover;}
+    .saved-thumb .st-title{position:absolute;bottom:0;left:0;right:0;padding:4px 5px;background:linear-gradient(transparent,rgba(0,0,0,.8));font-size:9px;line-height:1.2;}
+  </style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div id="topBar">
+  <div class="tl"><span>DESI</span><span>SCROLL</span></div>
+  <div class="top-right">
+    <button class="icon-btn" id="muteBtn" onclick="toggleMute()">🔊</button>
+    <button class="icon-btn" onclick="openSaved()">⭐</button>
+  </div>
+</div>
+
+<!-- Filter bar -->
+<div id="filterBar">
+  <button class="f-tab active" onclick="setFilter('all')" data-f="all">All</button>
+  <button class="f-tab" onclick="setFilter('desitales')" data-f="desitales">🔴 DesiTales</button>
+  <button class="f-tab" onclick="setFilter('desikahani')" data-f="desikahani">🟠 DesiKahani</button>
+  <button class="f-tab" onclick="setFilter('xahani')" data-f="xahani">🟣 Xahani</button>
+  <button class="f-tab" onclick="setFilter('indianbf')" data-f="indianbf">🟢 IndianBF</button>
+</div>
+
+<!-- Mute indicator -->
+<div id="muteIndicator">🔇</div>
+
+<!-- Feed -->
+<div id="feed"></div>
+
+<!-- Loading screen -->
+<div id="loadingScreen">
+  <div class="ll"><span>DESI</span><span style="color:#fff">SCROLL</span></div>
+  <div style="font-size:24px;" class="spin">⏳</div>
+  <div style="color:#666;font-size:12px;">Loading videos...</div>
+</div>
+
+<!-- Saved Modal -->
+<div id="savedModal">
+  <div id="savedHeader">
+    <h2>⭐ Saved Videos</h2>
+    <button class="close-modal" onclick="closeSaved()">✕</button>
+  </div>
+  <div id="savedGrid"></div>
+</div>
+
+<script>
+const PROXY = 'https://feedscroll.rayhandox.workers.dev';
+const M3U_URL = 'https://raw.githubusercontent.com/Rayhan2Git/Feed/main/playlist.m3u';
+
+const CDN_HOSTS = {
+  desitales:'cdn.desitales2.com', desikahani:'cdn.desikahani2.net',
+  xahani:'cdn.xahani.com', indianbf:'cdn.indianbfvideos.com'
+};
+const WWW_HOSTS = {
+  desitales:'www.desitales2.com', desikahani:'www.desikahani2.net',
+  xahani:'www.xahani.com', indianbf:'www.indianbfvideos.com'
+};
+
+let allVideos = [], filtered = [], currentFilter = 'all', isMuted = false;
+let savedKeys = JSON.parse(localStorage.getItem('ds_saved') || '[]');
+let observer, activeVideo = null;
+
+function getFolder(s, id) {
+  if(s==='indianbf') return Math.floor(id/1000)*1000;
+  if(id<1000) return 0; if(id<2000) return 1000;
+  if(id<3000) return 2000; return 3000;
+}
+function videoUrl(s,id){
+  const f=getFolder(s,id);
+  return `${PROXY}?url=${encodeURIComponent(`https://${CDN_HOSTS[s]}/${f}/${id}/${id}.mp4`)}`;
+}
+function thumbUrl(s,id){
+  const f=getFolder(s,id);
+  return `${PROXY}?url=${encodeURIComponent(`https://${WWW_HOSTS[s]}/videos/contents/videos_screenshots/${f}/${id}/320x180/1.jpg`)}`;
+}
+
+async function loadFeed() {
+  try {
+    const res = await fetch(M3U_URL+'?t='+Date.now());
+    const text = await res.text();
+    allVideos = parseM3U(text);
+    setFilter('all');
+    document.getElementById('loadingScreen').style.display = 'none';
+  } catch(e) {
+    document.getElementById('loadingScreen').innerHTML =
+      '<div style="color:#e50914;font-size:14px;padding:20px">Failed to load feed.<br>Check connection.</div>';
+  }
+}
+
+function parseM3U(text) {
+  const lines = text.split('\n'), vids = [];
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i].trim();
+    if(line.startsWith('#EXTINF')){
+      const t=line.match(/,(.+)$/), g=line.match(/group-title="([^"]+)"/),
+            lo=line.match(/tvg-logo="([^"]+)"/), id=line.match(/tvg-id="([^"]+)"/);
+      const url=(lines[i+1]||'').trim();
+      if(url&&!url.startsWith('#')){
+        const src=(g?g[1]:'').toLowerCase();
+        vids.push({
+          title:t?t[1].trim():'Video',
+          source:src||detectSrc(url),
+          id:id?parseInt(id[1]):0, url, logo:lo?lo[1]:null
+        }); i++;
+      }
+    }
+  }
+  return vids;
+}
+
+function detectSrc(url){
+  if(url.includes('desitales')) return 'desitales';
+  if(url.includes('desikahani')) return 'desikahani';
+  if(url.includes('xahani')) return 'xahani';
+  if(url.includes('indianbf')) return 'indianbf';
+  return 'unknown';
+}
+
+function setFilter(f) {
+  currentFilter = f;
+  document.querySelectorAll('.f-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelector(`[data-f="${f}"]`).classList.add('active');
+  filtered = f==='all' ? [...allVideos] : allVideos.filter(v=>v.source===f);
+  // Shuffle for variety
+  for(let i=filtered.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));[filtered[i],filtered[j]]=[filtered[j],filtered[i]];
+  }
+  buildFeed();
+}
+
+function buildFeed() {
+  const feed = document.getElementById('feed');
+  // Pause current video
+  if(activeVideo){ activeVideo.pause(); activeVideo=null; }
+  feed.innerHTML = '';
+  if(observer) observer.disconnect();
+
+  // Render slides (lazy - only first 20, load more on scroll)
+  const batch = filtered.slice(0, 20);
+  batch.forEach((v,i) => feed.appendChild(createSlide(v,i)));
+
+  // Intersection observer for autoplay
+  observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const video = entry.target.querySelector('video');
+      if(!video) return;
+      if(entry.isIntersecting){
+        if(activeVideo && activeVideo !== video){ activeVideo.pause(); }
+        activeVideo = video;
+        video.muted = isMuted;
+        video.play().catch(()=>{ video.muted=true; video.play().catch(()=>{}); });
+      } else {
+        video.pause();
+      }
+    });
+  }, {threshold: 0.7});
+
+  feed.querySelectorAll('.slide').forEach(s => observer.observe(s));
+  feed.scrollTop = 0;
+}
+
+function createSlide(v, idx) {
+  const div = document.createElement('div');
+  div.className = 'slide';
+
+  const proxiedUrl = v.id ? videoUrl(v.source, v.id)
+    : `${PROXY}?url=${encodeURIComponent(v.url)}`;
+
+  const thumbSrc = v.logo || (v.id ? thumbUrl(v.source, v.id) : '');
+  const saveKey = v.id+'_'+v.source;
+  const isSaved = savedKeys.includes(saveKey);
+
+  div.innerHTML = `
+    <video class="slide-video" src="${proxiedUrl}" loop playsinline webkit-playsinline
+      preload="metadata" poster="${thumbSrc}"></video>
+    <div class="slide-overlay">
+      <div class="slide-title">${v.title}</div>
+      <div class="slide-source">${v.source.toUpperCase()}</div>
+    </div>
+    <div class="slide-actions">
+      <button class="action-btn save-btn" onclick="toggleSave('${saveKey}',this,event)">
+        <span class="icon">${isSaved?'⭐':'🤍'}</span>
+        <span class="label">Save</span>
+      </button>
+      <button class="action-btn" onclick="shareVideo('${proxiedUrl}',event)">
+        <span class="icon">📤</span>
+        <span class="label">Share</span>
+      </button>
+    </div>`;
+
+  return div;
+}
+
+function toggleMute() {
+  isMuted = !isMuted;
+  document.getElementById('muteBtn').textContent = isMuted ? '🔇' : '🔊';
+  if(activeVideo) activeVideo.muted = isMuted;
+  const ind = document.getElementById('muteIndicator');
+  ind.textContent = isMuted ? '🔇' : '🔊';
+  ind.classList.add('show');
+  setTimeout(()=>ind.classList.remove('show'),700);
+}
+
+function toggleSave(key, btn, e) {
+  e.stopPropagation();
+  const idx = savedKeys.indexOf(key);
+  if(idx>=0){ savedKeys.splice(idx,1); btn.querySelector('.icon').textContent='🤍'; }
+  else { savedKeys.push(key); btn.querySelector('.icon').textContent='⭐'; }
+  localStorage.setItem('ds_saved', JSON.stringify(savedKeys));
+}
+
+function shareVideo(url, e) {
+  e.stopPropagation();
+  if(navigator.share){
+    navigator.share({title:'DesiScroll Video', url});
+  } else {
+    navigator.clipboard.writeText(url).then(()=>alert('Link copied!'));
+  }
+}
+
+function openSaved() {
+  const modal = document.getElementById('savedModal');
+  const grid = document.getElementById('savedGrid');
+  const savedVids = allVideos.filter(v=>savedKeys.includes(v.id+'_'+v.source));
+  grid.innerHTML = savedVids.map(v=>{
+    const t = v.id ? thumbUrl(v.source,v.id) : '';
+    return `<div class="saved-thumb" onclick="playSaved('${v.id}','${v.source}')">
+      <img src="${t}" onerror="this.style.display='none'" loading="lazy"/>
+      <div class="st-title">${v.title}</div>
+    </div>`;
+  }).join('') || '<div style="padding:30px;color:#666;text-align:center">No saved videos yet</div>';
+  modal.classList.add('open');
+}
+
+function closeSaved(){ document.getElementById('savedModal').classList.remove('open'); }
+
+function playSaved(id, source) {
+  closeSaved();
+  // Find video in filtered and jump to it, or switch filter
+  setFilter('all');
+  setTimeout(()=>{
+    const idx = filtered.findIndex(v=>String(v.id)===String(id)&&v.source===source);
+    if(idx>=0){
+      const feed = document.getElementById('feed');
+      const slides = feed.querySelectorAll('.slide');
+      if(slides[idx]) slides[idx].scrollIntoView();
+    }
+  }, 200);
+}
+
+loadFeed();
+</script>
+</body>
+</html>
